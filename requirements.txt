@@ -1,0 +1,4 @@
+Flask==3.0.3
+requests==2.31.0
+telethon==1.37.0
+gunicorn==22.0.0
